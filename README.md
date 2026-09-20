@@ -21,6 +21,126 @@ over time, checks delivery to your pincode, and sends alerts via **Email**,
 
 ---
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph External["🌐 External"]
+        FC[FirstCry.com]
+        SMTP[Gmail SMTP]
+        TG[Telegram API]
+        TW[Twilio WhatsApp API]
+    end
+
+    subgraph Container["🐳 Docker Container / Local Process"]
+        subgraph Backend["FastAPI Backend (backend/)"]
+            SCH["scheduler.py<br/>APScheduler — run_check() every N min"]
+            SCR["scraper.py<br/>Playwright / JSON API / BeautifulSoup"]
+            PIN["pincode_checker.py<br/>Delivery check automation"]
+            NOTIF["notifier.py<br/>Email · Telegram · WhatsApp"]
+            DB[("database.py<br/>SQLite (products, stock_events, app_settings)")]
+            API["routers/*<br/>products · settings · events"]
+            MAIN["main.py<br/>FastAPI app + lifespan + static files"]
+        end
+        FE["Frontend SPA (frontend/)<br/>index.html · app.js · style.css"]
+    end
+
+    User[("👤 User Browser")]
+
+    MAIN -->|starts on boot| SCH
+    SCH -->|1 scrape| SCR
+    SCR -->|scrape| FC
+    SCR -->|scraped products| SCH
+    SCH -->|2 diff vs DB| DB
+    SCH -->|3 check delivery for changed items| PIN
+    PIN -->|simulate pincode entry| FC
+    SCH -->|4 persist events/products| DB
+    SCH -->|5 dispatch alerts| NOTIF
+    NOTIF --> SMTP
+    NOTIF --> TG
+    NOTIF --> TW
+
+    User <-->|HTTP GET /| MAIN
+    MAIN -->|serves| FE
+    FE -->|fetch /api/*| API
+    API -->|read/write| DB
+    API -->|POST /api/check triggers| SCH
+```
+
+### Check Pipeline Workflow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as Scheduler (scheduler.py)
+    participant SC as Scraper
+    participant FC as FirstCry.com
+    participant DB as SQLite DB
+    participant P as Pincode Checker
+    participant N as Notifier
+    participant U as User (Email/Telegram/WhatsApp)
+
+    S->>SC: scrape_hot_wheels()
+    par Concurrent page fetches
+        SC->>FC: JSON paging API (fast path)
+    and
+        SC->>FC: Playwright fallback (JS render)
+    and
+        SC->>FC: BeautifulSoup last resort
+    end
+    FC-->>SC: product pages (streamed as they land)
+
+    loop for each scraped page batch
+        SC-->>S: batch of ScrapedProduct
+        S->>DB: lookup existing product_id
+        alt product not in DB
+            S->>DB: insert Product + NEW event
+        else exists & was OOS, now available
+            S->>DB: update Product + RESTOCK event
+        else exists & was available, now OOS
+            S->>DB: update Product + OOS event
+        else price dropped ≥5%
+            S->>DB: update Product + PRICE_DROP event
+        end
+
+        opt NEW or RESTOCK event
+            S->>P: batch_check_pincode(changed products)
+            P->>FC: simulate pincode entry per product
+            FC-->>P: deliverable true/false
+            P-->>S: delivery results
+        end
+
+        S->>N: dispatch_notification(event, delivery info)
+        N->>U: Email / Telegram / WhatsApp alert
+    end
+
+    S->>DB: purge delisted products (ids no longer scraped)
+    S-->>S: store summary in live feed (last 30 runs)
+```
+
+### Event Detection Rules
+
+```mermaid
+flowchart LR
+    A[Scraped Product] --> B{Exists in DB?}
+    B -- No --> NEW["🆕 NEW event"]
+    B -- Yes --> C{was OOS, now available?}
+    C -- Yes --> RESTOCK["🔄 RESTOCK event"]
+    C -- No --> D{was available, now OOS?}
+    D -- Yes --> OOS["❌ OOS event"]
+    D -- No --> E{price dropped ≥5%?}
+    E -- Yes --> DROP["💸 PRICE_DROP event"]
+    E -- No --> NONE[No event]
+
+    NEW --> F{Notifications enabled?}
+    RESTOCK --> F
+    DROP --> F
+    F -- Yes --> G[Check pincode delivery]
+    G --> H[Send notification]
+```
+
+---
+
 ## Quick Start (Local)
 
 ### 1. Prerequisites
