@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hot Wheels Hunt 🚗</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <!-- ── Header ──────────────────────────────────────────────────────────── -->
+    <header>
+      <div class="header-inner">
+        <div class="logo">
+          <span class="logo-icon">🚗</span>
+          <span>Hot Wheels Hunt</span>
+        </div>
+        <div class="header-actions">
+          <span class="last-refreshed" id="last-refreshed"></span>
+          <span class="countdown" id="countdown"></span>
+          <button id="btn-check" class="btn btn-primary">
+            <span class="spinner hidden" id="spinner"></span>
+            Run Check Now
+          </button>
+          <button class="btn btn-secondary" id="btn-settings">
+            ⚙ Settings
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── Notification banner ─────────────────────────────────────────────── -->
+    <div id="notif-banner" class="notif-banner" style="display: none"></div>
+
+    <!-- ── Stats bar ────────────────────────────────────────────────────────── -->
+    <section class="stats-bar">
+      <div class="stat-card green">
+        <span class="stat-value" id="stat-total">—</span>
+        <span class="stat-label">Total</span>
+      </div>
+      <div class="stat-card green">
+        <span class="stat-value" id="stat-instock">—</span>
+        <span class="stat-label">In Stock</span>
+      </div>
+      <div class="stat-card red">
+        <span class="stat-value" id="stat-oos">—</span>
+        <span class="stat-label">Out of Stock</span>
+      </div>
+      <div class="stat-card blue">
+        <span class="stat-value" id="stat-deliverable">—</span>
+        <span class="stat-label">Deliverable</span>
+      </div>
+      <div class="stat-card gray">
+        <span class="stat-value" id="stat-last-check">—</span>
+        <span class="stat-label">Last Check</span>
+      </div>
+    </section>
+
+    <!-- ── Tabs ─────────────────────────────────────────────────────────────── -->
+    <div class="tabs-bar">
+      <div class="tabs-inner">
+        <button class="tab-btn active" data-tab="products">🚗 Products</button>
+        <button class="tab-btn" data-tab="events">📋 Activity Log</button>
+        <button class="tab-btn" data-tab="live">🔴 Live Feed</button>
+      </div>
+    </div>
+
+    <!-- ── Main content ─────────────────────────────────────────────────────── -->
+    <main>
+      <!-- ── Products tab ──────────────────────────────────────────────────── -->
+      <div id="tab-products" class="tab-pane active">
+        <div class="filters">
+          <div class="filter-group">
+            <label>Status</label>
+            <select id="filter-status">
+              <option value="all">All</option>
+              <option value="available">In Stock</option>
+              <option value="oos">Out of Stock</option>
+              <option value="deliverable">Deliverable</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Series</label>
+            <select id="filter-series">
+              <option value="all">All Series</option>
+            </select>
+          </div>
+          <div class="filter-group filter-search-group">
+            <label>Search</label>
+            <input
+              type="text"
+              id="filter-search"
+              placeholder="Search by name…"
+            />
+          </div>
+        </div>
+
+        <div id="products-grid" class="products-grid"></div>
+        <p id="no-products" class="no-products hidden">
+          No products found. Run a check to get started.
+        </p>
+      </div>
+
+      <!-- ── Activity Log tab ──────────────────────────────────────────────── -->
+      <div id="tab-events" class="tab-pane">
+        <div class="log-header">
+          <p class="log-subtitle">All stock changes detected by the scraper</p>
+          <div class="log-filters">
+            <button class="log-filter-btn active" data-filter="all">All</button>
+            <button class="log-filter-btn" data-filter="NEW">New</button>
+            <button class="log-filter-btn" data-filter="RESTOCK">
+              Restock
+            </button>
+            <button class="log-filter-btn" data-filter="OOS">
+              Out of Stock
+            </button>
+            <button class="log-filter-btn" data-filter="PRICE_DROP">
+              Price Drop
+            </button>
+          </div>
+        </div>
+        <div id="events-list" class="events-list"></div>
+        <p id="no-events" class="no-products hidden">No events yet.</p>
+      </div>
+
+      <!-- ── Live Feed tab ─────────────────────────────────────────────────── -->
+      <div id="tab-live" class="tab-pane">
+        <div class="log-header">
+          <p class="log-subtitle">
+            Real-time scrape results — updates every 10 seconds
+          </p>
+          <span class="live-dot">● LIVE</span>
+        </div>
+        <div id="live-feed" class="live-feed"></div>
+        <p id="no-live" class="no-products hidden">Waiting for first scrape…</p>
+      </div>
+    </main>
+
+    <!-- ── Settings modal ───────────────────────────────────────────────────── -->
+    <div class="modal-backdrop hidden" id="modal-backdrop">
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        <div class="modal-header">
+          <h2 id="modal-title">Settings</h2>
+          <button class="modal-close" id="btn-modal-close" aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="settings-form">
+            <fieldset>
+              <legend>Delivery</legend>
+              <label
+                >Pincode (6-digit)
+                <input
+                  type="text"
+                  id="s-pincode"
+                  maxlength="6"
+                  pattern="\d{6}"
+                  required
+                />
+              </label>
+            </fieldset>
+            <fieldset>
+              <legend>Scheduler</legend>
+              <label
+                >Check interval (minutes)
+                <input type="number" id="s-interval" min="1" max="1440" />
+              </label>
+            </fieldset>
+            <fieldset>
+              <legend>Notifications</legend>
+              <label class="toggle-row">
+                <span>Enable notifications</span>
+                <input type="checkbox" id="s-notif-enabled" />
+              </label>
+              <label class="toggle-row">
+                <span>Email alerts</span>
+                <input type="checkbox" id="s-email-enabled" />
+              </label>
+              <label
+                >Email address
+                <input
+                  type="email"
+                  id="s-email-to"
+                  placeholder="you@example.com"
+                />
+              </label>
+              <label class="toggle-row">
+                <span>Telegram alerts</span>
+                <input type="checkbox" id="s-telegram-enabled" />
+              </label>
+            </fieldset>
+            <div class="modal-actions">
+              <button type="submit" class="btn btn-primary">
+                Save Settings
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-cancel">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

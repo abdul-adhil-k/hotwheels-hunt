@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  hotwheels-hunt:
+    build: .
+    container_name: hotwheels-hunt
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./hotwheels.db:/app/hotwheels.db   # persist SQLite database
+      - ./.env:/app/.env                    # inject secrets at runtime
+    environment:
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+    restart: unless-stopped
