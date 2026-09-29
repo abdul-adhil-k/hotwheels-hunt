@@ -22,7 +22,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import Session
 
 from backend.config import settings
-from backend.database import AppSettings, EventType, Product, SessionLocal, StockEvent
+from backend.database import AppSettings, EventType, Product, SessionLocal, StockEvent, WatchlistItem
 from backend.notifier import dispatch_notification
 from backend.pincode_checker import batch_check_pincode
 from backend.scraper import ScrapedProduct, scrape_hot_wheels
@@ -55,6 +55,63 @@ def _get_pincode(db: Session) -> str:
 
 def _notifications_enabled(db: Session) -> bool:
     return _get_setting(db, "notifications_enabled", "true").lower() == "true"
+
+
+# ── Favorites / priority watchlist ────────────────────────────────────────────
+
+async def _check_watchlist(db: Session, scraped: list[ScrapedProduct], now: datetime.datetime, notify: bool) -> None:
+    """Match favorite items (pasted URL or name) against this cycle's full
+    catalog scrape, so the Favorites tab reflects live availability without
+    any extra scraping. Restocks fire the same email/Telegram alert as a
+    regular product so you're notified even if the browser tab is closed."""
+    items = db.query(WatchlistItem).all()
+    if not items:
+        return
+
+    by_id = {p.product_id: p for p in scraped}
+    restocks: list[tuple[WatchlistItem, ScrapedProduct]] = []
+    for item in items:
+        match: Optional[ScrapedProduct] = by_id.get(item.product_id) if item.product_id else None
+        if match is None and item.query_type == "name":
+            needle = item.query.strip().lower()
+            match = next((p for p in scraped if needle in p.name.lower()), None)
+            if match:
+                item.product_id = match.product_id
+
+        item.last_checked = now
+        if match:
+            was_available = item.is_available
+            item.name = match.name
+            item.url = match.url
+            item.image_url = match.image_url
+            item.price = match.price
+            item.is_available = match.is_available
+            item.status = "available" if match.is_available else "found"
+            if match.is_available and not was_available:
+                restocks.append((item, match))
+
+    db.commit()
+
+    if notify and restocks:
+        for item, match in restocks:
+            product = db.query(Product).filter(Product.product_id == match.product_id).first()
+            if not product:
+                continue
+            event = StockEvent(
+                product_id=match.product_id,
+                product_name=match.name,
+                event_type=EventType.RESTOCK,
+                timestamp=now,
+                price=match.price,
+                details="⭐ Favorite",
+            )
+            db.add(event)
+            db.commit()
+            db.refresh(product)
+            sent = await dispatch_notification(event, product, "")
+            if sent:
+                event.notified = True
+                db.commit()
 
 
 # ── Core pipeline ─────────────────────────────────────────────────────────────
@@ -195,6 +252,12 @@ async def run_check() -> dict:
         logger.warning("No products scraped — skipping diff.")
         db.close()
         return summary
+
+    try:
+        await _check_watchlist(db, scraped, now, notify)
+    except Exception:
+        logger.error("Watchlist check error", exc_info=True)
+        db.rollback()
 
     try:
         # ── Purge products absent from this scrape (delisted entirely) ────

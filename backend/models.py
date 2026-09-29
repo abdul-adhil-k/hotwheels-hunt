@@ -65,6 +65,30 @@ class SettingsOut(BaseModel):
     check_interval_minutes: int
 
 
+# ── Watchlist (favorites) schemas ─────────────────────────────────────────────
+
+class WatchlistIn(BaseModel):
+    query: str
+
+
+class WatchlistOut(BaseModel):
+    id: int
+    query: str
+    query_type: str
+    product_id: Optional[str] = None
+    name: Optional[str] = None
+    url: Optional[str] = None
+    image_url: Optional[str] = None
+    price: Optional[float] = None
+    is_available: bool
+    status: str
+    created_at: datetime.datetime
+    last_checked: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 # ── Response schemas ──────────────────────────────────────────────────────────
 
 class CheckResponse(BaseModel):

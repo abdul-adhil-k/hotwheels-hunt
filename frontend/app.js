@@ -18,6 +18,18 @@ function fmtTimeShort(isoStr) {
     return d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true });
 }
 
+function fmtAgo(isoStr) {
+    if (!isoStr) return 'not yet checked';
+    const ms = Date.now() - new Date(isoStr + 'Z').getTime();
+    if (ms < 0 || ms < 1000) return 'just now';
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return `${s}s ago`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    return `${h}h ago`;
+}
+
 function escHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -79,6 +91,7 @@ function sendBrowserNotification(product, eventType = 'NEW') {
         RESTOCK: '🔄 Hot Wheels Restocked!',
         OOS: '❌ Hot Wheels Sold Out',
         PRICE_DROP: '💸 Hot Wheels Price Drop!',
+        FAVORITE: '⭐ Favorite is IN STOCK!',
     };
     const n = new Notification(titles[eventType] || '🚗 Hot Wheels Change', {
         body: `${product.name}${price}`,
@@ -350,6 +363,104 @@ function startEventPolling() {
     _eventPollTimer = setInterval(loadEvents, 1_000);
 }
 
+// ── Favorites (priority watchlist) ────────────────────────────────────────────
+
+let allFavorites = [];
+let _favAvailability = new Map();   // item id -> last known is_available, to detect "just became available"
+
+async function loadFavorites() {
+    try {
+        const fresh = await apiFetch('/api/watchlist');
+        fresh.forEach(item => {
+            const wasAvailable = _favAvailability.get(item.id);
+            if (item.is_available && wasAvailable !== true) {
+                // First sight of this favorite in stock — top priority alert
+                sendBrowserNotification(
+                    { product_id: item.product_id || String(item.id), name: item.name || item.query, price: item.price, url: item.url, image_url: item.image_url },
+                    'FAVORITE'
+                );
+                showToast(`⭐ Favorite in stock: ${(item.name || item.query).slice(0, 42)}`, 'success');
+            }
+            _favAvailability.set(item.id, item.is_available);
+        });
+        allFavorites = fresh;
+        renderFavorites();
+    } catch (e) { console.error('Favorites load failed:', e); }
+}
+
+function renderFavorites() {
+    const list = document.getElementById('favorites-list');
+    const empty = document.getElementById('no-favorites');
+    if (!allFavorites.length) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+
+    list.innerHTML = allFavorites.map(item => {
+        const label = item.name || item.query;
+        const statusBadge = item.status === 'available'
+            ? '<span class="badge badge-available">✅ In Stock</span>'
+            : item.status === 'found'
+                ? '<span class="badge badge-oos">🔍 Found — Out of Stock</span>'
+                : '<span class="badge badge-watching">👀 Searching…</span>';
+        const priceHtml = item.price ? `<span class="favorite-price">₹${Math.round(item.price)}</span>` : '';
+        const checkedHtml = `<span class="favorite-checked">Checked ${fmtAgo(item.last_checked)}</span>`;
+        const imgHtml = item.image_url
+            ? `<img src="${escHtml(item.image_url)}" alt="${escHtml(label)}" loading="lazy" />`
+            : '<span class="no-img">⭐</span>';
+        const linkHtml = item.url
+            ? `<a href="${escHtml(item.url)}" target="_blank" rel="noopener" class="btn btn-secondary">View →</a>`
+            : '';
+
+        return `
+<div class="favorite-card${item.is_available ? ' favorite-available' : ''}">
+  <div class="favorite-image">${imgHtml}</div>
+  <div class="favorite-body">
+    <div class="favorite-name" title="${escHtml(label)}">${escHtml(label)}</div>
+    <div class="favorite-status-row">${statusBadge}${priceHtml}</div>
+    <div class="favorite-meta-row">${checkedHtml}<span class="favorite-pulse" title="Actively monitoring every cycle"></span></div>
+  </div>
+  <div class="favorite-actions">
+    ${linkHtml}
+    <button class="btn btn-secondary" data-remove-fav="${item.id}">Remove</button>
+  </div>
+</div>`;
+    }).join('');
+
+    list.querySelectorAll('[data-remove-fav]').forEach(btn => {
+        btn.addEventListener('click', () => removeFavorite(parseInt(btn.dataset.removeFav)));
+    });
+}
+
+async function removeFavorite(id) {
+    try {
+        await apiFetch(`/api/watchlist/${id}`, { method: 'DELETE' });
+        _favAvailability.delete(id);
+        await loadFavorites();
+    } catch (e) { showToast(`Remove failed: ${e.message}`, 'error'); }
+}
+
+document.getElementById('favorite-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const input = document.getElementById('favorite-input');
+    const query = input.value.trim();
+    if (!query) return;
+    try {
+        await apiFetch('/api/watchlist', { method: 'POST', body: JSON.stringify({ query }) });
+        input.value = '';
+        showToast('Added to favorites! ⭐', 'success');
+        await loadFavorites();
+    } catch (err) { showToast(`Couldn't add: ${err.message}`, 'error'); }
+});
+
+let _favPollTimer = null;
+function startFavoritePolling() {
+    if (_favPollTimer) clearInterval(_favPollTimer);
+    _favPollTimer = setInterval(loadFavorites, 2_000);
+}
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -362,6 +473,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         // Re-fetch data when switching tabs so content is never stale
         if (btn.dataset.tab === 'events') loadEvents();
         if (btn.dataset.tab === 'live') loadLiveFeed();
+        if (btn.dataset.tab === 'favorites') loadFavorites();
     });
 });
 
@@ -492,7 +604,9 @@ async function startPolling() {
 }
 
 loadAll();
+loadFavorites();
 startPolling();
 startLivePolling();
 startEventPolling();
+startFavoritePolling();
 updateNotifBanner();

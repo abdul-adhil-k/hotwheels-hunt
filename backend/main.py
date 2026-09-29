@@ -23,7 +23,7 @@ from backend import scheduler as sched_module
 from backend.config import settings
 from backend.database import AppSettings, Product, SessionLocal, StockEvent, get_db, init_db
 from backend.models import CheckResponse, StatsOut
-from backend.routers import products, settings as settings_router, events
+from backend.routers import products, settings as settings_router, events, watchlist
 
 logging.basicConfig(
     level=logging.INFO,
@@ -82,6 +82,7 @@ app.add_middleware(
 app.include_router(products.router)
 app.include_router(settings_router.router)
 app.include_router(events.router)
+app.include_router(watchlist.router)
 
 
 @app.post("/api/check", response_model=CheckResponse, tags=["check"])

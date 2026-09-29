@@ -595,6 +595,12 @@ def _extract_color_variants(html: str) -> list[ScrapedProduct]:
             seen_ids.add(pid)
 
             images = [item for item in (raw.get("Img") or "").split(";") if item]
+            # "CS" (current stock) is the same field the main paging API exposes
+            # as CrntStock — trust it instead of assuming every tile is unavailable.
+            try:
+                cs_stock = int(float(raw.get("CS") or 0))
+            except (TypeError, ValueError):
+                cs_stock = 0
             variants.append(
                 ScrapedProduct(
                     product_id=pid,
@@ -603,7 +609,7 @@ def _extract_color_variants(html: str) -> list[ScrapedProduct]:
                     price=float(raw["mrp"]) if raw.get("mrp") else None,
                     original_price=float(raw["mrp"]) if raw.get("mrp") else None,
                     image_url=_IMAGE_BASE + images[0] if images else None,
-                    is_available=False,
+                    is_available=cs_stock > 0,
                     series=_detect_series(name),
                 )
             )

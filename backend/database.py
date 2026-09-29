@@ -65,6 +65,24 @@ class AppSettings(Base):
     value = Column(Text, nullable=True)
 
 
+class WatchlistItem(Base):
+    """A user's 'must-have' product — tracked by pasted URL or name until it's in stock."""
+    __tablename__ = "watchlist_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    query = Column(String, nullable=False)         # raw pasted URL or product name
+    query_type = Column(String, nullable=False)    # "url" | "name"
+    product_id = Column(String, nullable=True, index=True)   # resolved once matched to the catalog
+    name = Column(String, nullable=True)
+    url = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
+    price = Column(Float, nullable=True)
+    is_available = Column(Boolean, default=False)
+    status = Column(String, default="watching")   # watching | found | available
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    last_checked = Column(DateTime, nullable=True)
+
+
 def get_db():
     db = SessionLocal()
     try:

@@ -58,6 +58,7 @@
     <!-- ── Tabs ─────────────────────────────────────────────────────────────── -->
     <div class="tabs-bar">
       <div class="tabs-inner">
+        <button class="tab-btn" data-tab="favorites">⭐ Favorites</button>
         <button class="tab-btn active" data-tab="products">🚗 Products</button>
         <button class="tab-btn" data-tab="events">📋 Activity Log</button>
         <button class="tab-btn" data-tab="live">🔴 Live Feed</button>
@@ -66,6 +67,32 @@
 
     <!-- ── Main content ─────────────────────────────────────────────────────── -->
     <main>
+      <!-- ── Favorites tab ─────────────────────────────────────────────────── -->
+      <div id="tab-favorites" class="tab-pane">
+        <div class="log-header">
+          <p class="log-subtitle">
+            Paste the exact product URL or name of the Hot Wheels you want most
+            — it's checked every cycle and alerts you the instant it's in stock.
+          </p>
+          <span class="live-dot" id="favorites-live-dot">● MONITORING</span>
+        </div>
+        <form id="favorite-form" class="favorite-form">
+          <input
+            type="text"
+            id="favorite-input"
+            placeholder="Paste product URL or type the product name…"
+            required
+          />
+          <button type="submit" class="btn btn-primary">
+            ⭐ Add to Favorites
+          </button>
+        </form>
+        <div id="favorites-list" class="favorites-list"></div>
+        <p id="no-favorites" class="no-products hidden">
+          No favorites yet. Add the product you need most above.
+        </p>
+      </div>
+
       <!-- ── Products tab ──────────────────────────────────────────────────── -->
       <div id="tab-products" class="tab-pane active">
         <div class="filters">
